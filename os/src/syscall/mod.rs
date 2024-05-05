@@ -20,12 +20,22 @@ const SYSCALL_YIELD: usize = 124;
 const SYSCALL_GET_TIME: usize = 169;
 /// taskinfo syscall
 const SYSCALL_TASK_INFO: usize = 410;
+/// syscall tong
+pub const SYSCALL_TONG: [usize; CURR_SYSCALL_NUM] = [
+    SYSCALL_WRITE,
+    SYSCALL_EXIT,
+    SYSCALL_YIELD,
+    SYSCALL_GET_TIME,
+    SYSCALL_TASK_INFO,
+];
 
 mod fs;
 mod process;
 
 use fs::*;
-use process::*;
+pub use process::*;
+use crate::config::CURR_SYSCALL_NUM;
+
 /// handle syscall exception with `syscall_id` and other arguments
 pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
     match syscall_id {
@@ -37,3 +47,13 @@ pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }
 }
+
+// pub fn tong_map(syscall_id: usize) -> usize {
+//     if let Some(id) = SYSCALL_TONG
+//         .iter()
+//         .find(|&val| syscall_id == *val) {
+//         *id
+//     } else {
+//         panic!()
+//     }
+// }
