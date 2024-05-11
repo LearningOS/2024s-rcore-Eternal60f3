@@ -25,11 +25,27 @@ const SYSCALL_MMAP: usize = 222;
 /// taskinfo syscall
 const SYSCALL_TASK_INFO: usize = 410;
 
+/// syscall tong
+pub const SYSCALL_TONG: [usize; SYSCALL_CNT] = [
+    SYSCALL_WRITE,
+    SYSCALL_EXIT,
+    SYSCALL_YIELD,
+    SYSCALL_GET_TIME,
+    SYSCALL_TASK_INFO,
+    SYSCALL_SBRK,
+    SYSCALL_MUNMAP,
+    SYSCALL_MMAP,
+];
+
 mod fs;
 mod process;
 
 use fs::*;
 use process::*;
+use crate::config::SYSCALL_CNT;
+
+pub use process::TaskInfo;
+
 /// handle syscall exception with `syscall_id` and other arguments
 pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
     match syscall_id {

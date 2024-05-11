@@ -17,6 +17,10 @@ mod task;
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
+use crate::timer::get_time_ms;
+use crate::config::MAX_SYSCALL_NUM;
+use crate::syscall::{SYSCALL_TONG, TaskInfo};
+use crate::mm::{MapPermission, VPNRange, VirtAddr, VirtPageNum};
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
@@ -77,9 +81,16 @@ impl TaskManager {
     /// But in ch4, we load apps statically, so the first task is a real app.
     fn run_first_task(&self) -> ! {
         let mut inner = self.inner.exclusive_access();
-        let next_task = &mut inner.tasks[0];
-        next_task.task_status = TaskStatus::Running;
-        let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
+        let task0 = &mut inner.tasks[0];
+        task0.task_status = TaskStatus::Running;
+        let next_task_cx_ptr = &task0.task_cx as *const TaskContext;
+
+        if task0.start_time == -1 {
+            task0.start_time = get_time_ms() as isize;
+        } else {
+            panic!("task0 is running");
+        }
+        
         drop(inner);
         let mut _unused = TaskContext::zero_init();
         // before this, we should drop local variables that must be dropped manually
@@ -140,6 +151,11 @@ impl TaskManager {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
             inner.tasks[next].task_status = TaskStatus::Running;
+
+            if inner.tasks[next].start_time == -1 {
+                inner.tasks[next].start_time = get_time_ms() as isize;
+            }
+            
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
@@ -152,6 +168,69 @@ impl TaskManager {
         } else {
             panic!("All applications completed!");
         }
+    }
+
+    /// add syscall cnt of current task
+    fn add_current_syscall_cnt(&self, syscall_id: usize) {
+        if let Some((id, _)) = SYSCALL_TONG
+            .iter()
+            .enumerate()
+            .find(|(_, &val)| syscall_id == val) 
+        {
+            let mut inner = self.inner.exclusive_access();
+            let curr_id = inner.current_task;
+            let curr_task = &mut inner.tasks[curr_id];
+            curr_task.syscall_times[id] += 1;
+        } else {
+            panic!("Unsupported syscall_id: {}", syscall_id);
+        }
+    }
+
+    /// get information of current task
+    fn get_current_info(&self, ti: *mut TaskInfo) {
+        let inner = self.inner.exclusive_access();
+        let curr_task = &inner.tasks[inner.current_task];
+        let status = curr_task.task_status;
+        let mut syscall_times = [0; MAX_SYSCALL_NUM];
+        curr_task.syscall_times.iter().enumerate().for_each(|(id, cnt)| {
+            let syscall_id = SYSCALL_TONG[id];
+            syscall_times[syscall_id] = *cnt;
+        });
+        let time = get_time_ms() - curr_task.start_time as usize;
+        unsafe{
+            *ti = TaskInfo {
+                status,
+                syscall_times,
+                time
+            };
+        }
+    }
+
+    /// check whether a vpn has been mapped in vpnrange
+    pub fn curr_vpnrange_exist_map(&self, start:VirtPageNum, end: VirtPageNum) -> bool {
+        let vpnrange = VPNRange::new(start, end);
+        let inner = self.inner.exclusive_access();
+        let curr_task = &inner.tasks[inner.current_task];
+        
+        for vpn in vpnrange {
+            if curr_task.memory_set.vpn_ismap(vpn) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// new a new area that is [start_va, end_va]
+    pub fn curr_mmap(
+        &self,
+        start_va: VirtAddr,
+        end_va: VirtAddr,
+        permission: MapPermission,
+    ) {
+        let mut inner = self.inner.exclusive_access();
+        let curr_id = inner.current_task;
+        let curr_task = &mut inner.tasks[curr_id];
+        curr_task.memory_set.insert_framed_area(start_va, end_va, permission);
     }
 }
 
@@ -201,4 +280,37 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Add syscall times of current 'Running' task
+pub fn add_current_syscall_cnt(syscall_id: usize) {
+    TASK_MANAGER.add_current_syscall_cnt(syscall_id);
+}
+
+/// Get info of current task
+pub fn get_current_info(ti: *mut TaskInfo) {
+    TASK_MANAGER.get_current_info(ti);
+}
+
+/// check whether a vpn has been mapped in vpnrange of current task
+pub fn curr_vpnrange_exist_map(start: VirtPageNum, end: VirtPageNum) -> bool {
+    TASK_MANAGER.curr_vpnrange_exist_map(start, end)
+}
+
+/// alloc a new area that is [start_va, end_va]
+pub fn curr_mmap(start: usize, len: usize, mut port: usize) -> isize {
+    let end_va = VirtAddr::from(start + len);
+    let start_va = VirtAddr::from(start);
+    if !start_va.aligned() || !end_va.aligned() 
+    || (port & !0x7) != 0 || (port & 0x7) == 0 
+    || curr_vpnrange_exist_map(start_va.floor(), end_va.ceil()) {
+        -1
+    } else {
+        port <<= 1;
+        let mut permission = MapPermission::from_bits(port as u8).unwrap();
+        permission = permission | MapPermission::U;
+        TASK_MANAGER.curr_mmap(start_va, end_va, permission);
+        0
+    }
+    // 0
 }

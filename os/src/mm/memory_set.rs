@@ -262,6 +262,11 @@ impl MemorySet {
             false
         }
     }
+
+    /// check a vpn whether has been mapped
+    pub fn vpn_ismap(&self, vpn: VirtPageNum) -> bool {
+        self.page_table.is_map(vpn)
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

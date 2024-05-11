@@ -1,6 +1,8 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum, PhysAddr};
+use crate::config::PAGE_SIZE;
+use _core::{mem, panic};
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -143,6 +145,25 @@ impl PageTable {
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.find_pte(vpn).map(|pte| *pte)
     }
+    pub fn va_var2pa_mut<T>(&self, ptr: *mut T) -> Option<&'static mut T> {
+        let va = VirtAddr::from(ptr as usize);
+        let vpn = va.floor();
+        if let Some(pte) = self.translate(vpn) {
+            let ppn = pte.ppn();
+            let pa = PhysAddr::from(PhysAddr::from(ppn).0 + va.page_offset());
+            if PAGE_SIZE - pa.page_offset() >= mem::size_of::<T>() {
+                return Some(pa.get_mut());
+            } 
+        }
+        return None;
+    }
+    pub fn is_map(&self, vpn: VirtPageNum) -> bool {
+        if let Some(_) = self.find_pte(vpn) {
+            true
+        } else {
+            false
+        }
+    }
     /// get the token from the page table
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
@@ -170,4 +191,14 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
         start = end_va.into();
     }
     v
+}
+
+/// get mut var by pa 
+pub fn va_var2pa_mut<T>(token: usize, ptr: *mut T) -> &'static mut T {
+    let page_table = PageTable::from_token(token);
+    if let Some(quote) = page_table.va_var2pa_mut(ptr) {
+        quote
+    } else {
+        panic!("the ptr not map or it is splited by two pages");
+    }
 }

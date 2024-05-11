@@ -1,6 +1,6 @@
 //! Types related to task management
 use super::TaskContext;
-use crate::config::TRAP_CONTEXT_BASE;
+use crate::config::{SYSCALL_CNT, TRAP_CONTEXT_BASE};
 use crate::mm::{
     kernel_stack_position, MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE,
 };
@@ -28,6 +28,12 @@ pub struct TaskControlBlock {
 
     /// Program break
     pub program_brk: usize,
+    
+    /// The numbers of syscall
+    pub syscall_times: [u32; SYSCALL_CNT],
+    
+    /// The first running time 
+    pub start_time: isize,
 }
 
 impl TaskControlBlock {
@@ -63,6 +69,8 @@ impl TaskControlBlock {
             base_size: user_sp,
             heap_bottom: user_sp,
             program_brk: user_sp,
+            syscall_times: [0; SYSCALL_CNT],
+            start_time: -1,
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
