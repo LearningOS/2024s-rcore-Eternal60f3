@@ -11,6 +11,9 @@ use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
+use crate::timer::get_time_ms;
+use crate::config::MAX_SYSCALL_NUM;
+use crate::syscall::{TaskInfo, SYSCALL_TONG};
 
 /// Processor management structure
 pub struct Processor {
@@ -61,6 +64,12 @@ pub fn run_tasks() {
             let mut task_inner = task.inner_exclusive_access();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
+
+            // 当进程第一次运行的时候，更新它的开始时间
+            if task_inner.start_time == -1 {
+                task_inner.start_time = get_time_ms() as isize;
+            }
+
             // release coming task_inner manually
             drop(task_inner);
             // release coming task TCB manually
@@ -107,5 +116,43 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     drop(processor);
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
+    }
+}
+
+/// 增加当前运行进程所调用的系统调用的次数
+pub fn add_current_syscall_cnt(syscall_id: usize) {
+    if let Some((id, _)) = SYSCALL_TONG
+        .iter()
+        .enumerate()
+        .find(|(_, &val)| syscall_id == val) 
+    {
+        let curr_task = take_current_task().unwrap();
+        let mut inner = curr_task.inner_exclusive_access();
+        inner.syscall_times[id] += 1;
+    } else {
+        panic!("Unsupported syscall_id: {}", syscall_id);
+    }
+}
+
+/// 获取当前运行进程的系统调用次数，以及运行的总时长
+pub fn get_current_info(ti: *mut TaskInfo) {
+    let curr_task = current_task().unwrap();
+    let inner = curr_task.inner_exclusive_access();
+    let status = inner.task_status;
+    let mut syscall_times = [0; MAX_SYSCALL_NUM];
+    inner.syscall_times
+        .iter()
+        .enumerate()
+        .for_each(|(id, cnt)| {
+        let syscall_id = SYSCALL_TONG[id];
+        syscall_times[syscall_id] = *cnt;
+    });
+    let time = get_time_ms() - inner.start_time as usize;
+    unsafe{
+        *ti = TaskInfo {
+            status,
+            syscall_times,
+            time
+        };
     }
 }

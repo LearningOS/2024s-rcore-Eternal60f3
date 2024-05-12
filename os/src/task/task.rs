@@ -1,7 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT_BASE;
+use crate::config::{TRAP_CONTEXT_BASE, SYSCALL_CNT};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
@@ -68,6 +68,12 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// The numbers of syscall
+    pub syscall_times: [u32; SYSCALL_CNT],
+    
+    /// The first running time 
+    pub start_time: isize,
 }
 
 impl TaskControlBlockInner {
@@ -118,6 +124,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    syscall_times: [0; SYSCALL_CNT],
+                    start_time: -1,
                 })
             },
         };
@@ -150,6 +158,10 @@ impl TaskControlBlock {
         inner.trap_cx_ppn = trap_cx_ppn;
         // initialize base_size
         inner.base_size = user_sp;
+        // 初始化起始时间
+        inner.start_time = -1;
+        // 初始化使用的系统调用次数
+        inner.syscall_times = [0; SYSCALL_CNT];
         // initialize trap_cx
         let trap_cx = inner.get_trap_cx();
         *trap_cx = TrapContext::app_init_context(
@@ -191,6 +203,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    syscall_times: [0; SYSCALL_CNT],
+                    start_time: -1,
                 })
             },
         });

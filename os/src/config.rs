@@ -15,6 +15,8 @@ pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_SIZE_BITS: usize = 0xc;
 /// the max number of syscall
 pub const MAX_SYSCALL_NUM: usize = 500;
+/// 目前操作系统所支持的系统调用次数
+pub const SYSCALL_CNT: usize = 15;
 /// the virtual addr of trapoline
 pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
 /// the virtual addr of trap context
