@@ -267,6 +267,23 @@ impl MemorySet {
     pub fn vpn_ismap(&self, vpn: VirtPageNum) -> bool {
         self.page_table.is_map(vpn)
     }
+
+    /// remove a area in this memory_set with start_vpn 
+    /// if no this area return -1, else return 0
+    pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) -> isize {
+        if let Some((idx, area)) = self
+            .areas
+            .iter_mut()
+            .enumerate()
+            .find(|(_, area)| area.vpn_range.get_start() == start_vpn)
+        {
+            area.unmap(&mut self.page_table);
+            self.areas.remove(idx);
+            0
+        } else {
+            -1
+        }
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

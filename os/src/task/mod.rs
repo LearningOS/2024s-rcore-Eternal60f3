@@ -208,12 +208,26 @@ impl TaskManager {
 
     /// check whether a vpn has been mapped in vpnrange
     pub fn curr_vpnrange_exist_map(&self, start:VirtPageNum, end: VirtPageNum) -> bool {
+        let inner = self.inner.exclusive_access();
+        let curr_task = &inner.tasks[inner.current_task];
+        
+        let vpnrange = VPNRange::new(start, end);
+        for vpn in vpnrange {
+            if curr_task.memory_set.vpn_ismap(vpn) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// check whether a vpn has been unmapped in vpnrange
+    pub fn curr_vpnrange_exist_unmap(&self, start:VirtPageNum, end: VirtPageNum) -> bool {
         let vpnrange = VPNRange::new(start, end);
         let inner = self.inner.exclusive_access();
         let curr_task = &inner.tasks[inner.current_task];
         
         for vpn in vpnrange {
-            if curr_task.memory_set.vpn_ismap(vpn) {
+            if !curr_task.memory_set.vpn_ismap(vpn) {
                 return true;
             }
         }
@@ -231,6 +245,14 @@ impl TaskManager {
         let curr_id = inner.current_task;
         let curr_task = &mut inner.tasks[curr_id];
         curr_task.memory_set.insert_framed_area(start_va, end_va, permission);
+    }
+
+    /// unmap [start_va, end_va]
+    pub fn curr_munmap_with_start_vpn(&self, start_vpn: VirtPageNum) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let curr_id = inner.current_task;
+        let curr_task = &mut inner.tasks[curr_id];
+        curr_task.memory_set.remove_area_with_start_vpn(start_vpn)
     }
 }
 
@@ -297,11 +319,17 @@ pub fn curr_vpnrange_exist_map(start: VirtPageNum, end: VirtPageNum) -> bool {
     TASK_MANAGER.curr_vpnrange_exist_map(start, end)
 }
 
+/// check whether a vpn has been unmapped in vpnrange of current task
+pub fn curr_vpnrange_exist_unmap(start: VirtPageNum, end: VirtPageNum) -> bool {
+    TASK_MANAGER.curr_vpnrange_exist_unmap(start, end)
+}
+
 /// alloc a new area that is [start_va, end_va]
 pub fn curr_mmap(start: usize, len: usize, mut port: usize) -> isize {
-    let end_va = VirtAddr::from(start + len);
     let start_va = VirtAddr::from(start);
-    if !start_va.aligned() || !end_va.aligned() 
+    let end_va = VirtAddr::from(start + len);
+    // println!("start: {:x}, end: {:x}", start_va.0, end_va.0);
+    if !start_va.aligned()
     || (port & !0x7) != 0 || (port & 0x7) == 0 
     || curr_vpnrange_exist_map(start_va.floor(), end_va.ceil()) {
         -1
@@ -312,5 +340,15 @@ pub fn curr_mmap(start: usize, len: usize, mut port: usize) -> isize {
         TASK_MANAGER.curr_mmap(start_va, end_va, permission);
         0
     }
-    // 0
+}
+
+/// unmap a area that is starting in start_va
+pub fn curr_munmap(start: usize, len: usize) -> isize {
+    let start_va = VirtAddr::from(start);
+    let end_va = VirtAddr::from(start + len);
+    if !start_va.aligned() || curr_vpnrange_exist_unmap(start_va.floor(), end_va.ceil()) {
+        -1
+    } else {
+        TASK_MANAGER.curr_munmap_with_start_vpn(start_va.floor())
+    }
 }
