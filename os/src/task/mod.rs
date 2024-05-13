@@ -36,6 +36,7 @@ pub use processor::{
     Processor,
     add_current_syscall_cnt,
     get_current_info,
+    curr_set_priority,
 };
 /// Suspend the current 'Running' task and run the next task in task list.
 pub fn suspend_current_and_run_next() {
