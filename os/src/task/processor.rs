@@ -12,7 +12,7 @@ use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
 use crate::timer::get_time_ms;
-use crate::config::MAX_SYSCALL_NUM;
+use crate::config::{BIG_STRIDE, MAX_SYSCALL_NUM};
 use crate::syscall::{TaskInfo, SYSCALL_TONG};
 
 /// Processor management structure
@@ -69,6 +69,9 @@ pub fn run_tasks() {
             if task_inner.start_time == -1 {
                 task_inner.start_time = get_time_ms() as isize;
             }
+
+            // 增加当前运行进程的步长
+            task_inner.stride += BIG_STRIDE / task_inner.prior;
 
             // release coming task_inner manually
             drop(task_inner);
@@ -160,4 +163,12 @@ pub fn get_current_info(ti: *mut TaskInfo) {
             time
         };
     }
+}
+
+/// 修改当前运行进程的优先级
+pub fn curr_set_priority(prio: isize) {
+    let curr_task = take_current_task().unwrap();
+    let mut inner = curr_task.inner_exclusive_access();
+    inner.prior = prio as usize;
+    restore_current_task(curr_task.clone());
 }
