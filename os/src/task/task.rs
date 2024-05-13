@@ -220,6 +220,56 @@ impl TaskControlBlock {
         // ---- release parent PCB
     }
 
+    /// 直接对于每一个程序创建一个新进程，实现 fork + exec 的功能
+    pub fn spawn(self: &Arc<Self>, elf_data: &[u8]) -> Arc<Self>{
+        // ---- access parent PCB exclusively
+        let pid_handle = pid_alloc();
+        let kernel_stack = kstack_alloc();   
+        let kernel_stack_top = kernel_stack.get_top();
+        
+        let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        let trap_cx_ppn = memory_set
+            .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
+            .unwrap()
+            .ppn();
+
+        let mut curr_inner = self.inner_exclusive_access();
+
+        let task_control_block = Arc::new(TaskControlBlock {
+            pid: pid_handle,
+            kernel_stack,
+            inner: unsafe {
+                UPSafeCell::new(TaskControlBlockInner {
+                    trap_cx_ppn,
+                    base_size: user_sp,
+                    task_cx: TaskContext::goto_trap_return(kernel_stack_top),
+                    task_status: TaskStatus::Ready,
+                    memory_set,
+                    parent: Some(Arc::downgrade(self)),
+                    children: Vec::new(),
+                    exit_code: 0,
+                    heap_bottom: user_sp,
+                    program_brk: user_sp,
+                    syscall_times: [0; SYSCALL_CNT],
+                    start_time: -1,
+                })
+            },
+        });
+
+        let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
+        *trap_cx = TrapContext::app_init_context(
+            entry_point,
+            user_sp,
+            KERNEL_SPACE.exclusive_access().token(),
+            kernel_stack_top,
+            trap_handler as usize,
+        );
+
+        curr_inner.children.push(task_control_block.clone());
+
+        task_control_block
+    }
+
     /// get pid of process
     pub fn getpid(&self) -> usize {
         self.pid.0

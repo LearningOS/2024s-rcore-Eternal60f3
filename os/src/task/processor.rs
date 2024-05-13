@@ -90,6 +90,10 @@ pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
     PROCESSOR.exclusive_access().take_current()
 }
 
+pub fn restore_current_task(curr_task: Arc<TaskControlBlock>) {
+    PROCESSOR.exclusive_access().current = Some(curr_task);
+}
+
 /// Get a copy of the current task
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
     PROCESSOR.exclusive_access().current()
@@ -129,6 +133,7 @@ pub fn add_current_syscall_cnt(syscall_id: usize) {
         let curr_task = take_current_task().unwrap();
         let mut inner = curr_task.inner_exclusive_access();
         inner.syscall_times[id] += 1;
+        restore_current_task(curr_task.clone());
     } else {
         panic!("Unsupported syscall_id: {}", syscall_id);
     }
