@@ -247,12 +247,12 @@ impl TaskManager {
         curr_task.memory_set.insert_framed_area(start_va, end_va, permission);
     }
 
-    /// unmap [start_va, end_va]
-    pub fn curr_munmap_with_start_vpn(&self, start_vpn: VirtPageNum) -> isize {
+    /// unmap [start_va, end _va]
+    pub fn curr_munmap(&self, start_vpn: VirtPageNum, end_vpn: VirtPageNum) -> isize {
         let mut inner = self.inner.exclusive_access();
         let curr_id = inner.current_task;
         let curr_task = &mut inner.tasks[curr_id];
-        curr_task.memory_set.remove_area_with_start_vpn(start_vpn)
+        curr_task.memory_set.unmap_vpnrange(start_vpn, end_vpn) 
     }
 }
 
@@ -346,9 +346,10 @@ pub fn curr_mmap(start: usize, len: usize, mut port: usize) -> isize {
 pub fn curr_munmap(start: usize, len: usize) -> isize {
     let start_va = VirtAddr::from(start);
     let end_va = VirtAddr::from(start + len);
-    if !start_va.aligned() || curr_vpnrange_exist_unmap(start_va.floor(), end_va.ceil()) {
+    if !start_va.aligned() ||
+    curr_vpnrange_exist_unmap(start_va.floor(), end_va.ceil()) {
         -1
     } else {
-        TASK_MANAGER.curr_munmap_with_start_vpn(start_va.floor())
+        TASK_MANAGER.curr_munmap(start_va.floor(), end_va.ceil())
     }
 }

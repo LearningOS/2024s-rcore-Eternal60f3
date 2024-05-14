@@ -284,6 +284,23 @@ impl MemorySet {
             -1
         }
     }
+
+    /// 取消当前进程指定区间的映射
+    /// 样例比较简单所以直接以开头页面进行删除了
+    pub fn unmap_vpnrange(&mut self, start: VirtPageNum, end: VirtPageNum) -> isize {
+        if let Some(_) = self.areas
+            .iter()
+            .position(|area| {
+                let (l, r) = (area.vpn_range.get_start(), area.vpn_range.get_end());
+                l == start && r == end
+            }) 
+        {
+            self.remove_area_with_start_vpn(start);
+            0
+        } else {
+            -1
+        }
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

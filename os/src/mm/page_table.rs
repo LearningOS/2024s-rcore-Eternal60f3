@@ -158,8 +158,8 @@ impl PageTable {
         return None;
     }
     pub fn is_map(&self, vpn: VirtPageNum) -> bool {
-        if let Some(_) = self.find_pte(vpn) {
-            true
+        if let Some(pte) = self.find_pte(vpn) {
+            pte.is_valid()
         } else {
             false
         }
