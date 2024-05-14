@@ -2,15 +2,17 @@
 use alloc::sync::Arc;
 
 use crate::{
-    config::MAX_SYSCALL_NUM,
-    loader::get_app_data_by_name,
-    timer::get_time_us,
-    mm::{translated_refmut, translated_str, va_var2pa_mut},
+    config::MAX_SYSCALL_NUM, 
+    loader::get_app_data_by_name, 
+    mm::{
+        translated_refmut, translated_str, va_var2pa_mut, 
+        vpnrange_exist_mapped,
+        MapPermission, VirtAddr
+    }, 
     task::{
-        add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus, get_current_info,
-        curr_set_priority,
+        add_task, curr_mmap, curr_set_priority, current_task, current_user_token, exit_current_and_run_next, get_current_info, suspend_current_and_run_next, TaskStatus
     },
+    timer::get_time_us,
 };
 
 #[repr(C)]
@@ -144,12 +146,26 @@ pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
 }
 
 /// YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_mmap",
         current_task().unwrap().pid.0
     );
-    -1
+    
+    let start_va = VirtAddr::from(start);
+    let end_va = VirtAddr::from(start + len);
+    if !start_va.aligned() ||
+    (port & !0x7) != 0 || (port & 0x7) == 0 
+    || vpnrange_exist_mapped(current_user_token(),
+    start_va.floor(), end_va.ceil()) {
+        -1
+    } else {
+        let port = port << 1;
+        let mut permission = MapPermission::from_bits(port as u8).unwrap();
+        permission |= MapPermission::U;
+        curr_mmap(start_va, end_va, permission);
+        0
+    }
 }
 
 /// YOUR JOB: Implement munmap.

@@ -1,4 +1,5 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
+use super::address::VPNRange;
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use crate::config::PAGE_SIZE;
 use core::mem;
@@ -238,4 +239,16 @@ pub fn va_var2pa_mut<T>(token: usize, ptr: *mut T) -> &'static mut T {
     } else {
         panic!("the ptr not map or it is splited by two pages");
     }
+}
+
+/// 查看当前页表中对于[start, end)中的vpn是否存在已经mapped的页面
+pub fn vpnrange_exist_mapped(token: usize, start: VirtPageNum, end: VirtPageNum) -> bool {
+    let page_table = PageTable::from_token(token);
+    let vpn_range = VPNRange::new(start, end);
+    for vpn in vpn_range {
+        if let Some(_) = page_table.find_pte(vpn) {
+            return true;
+        }
+    }
+    return false;
 }

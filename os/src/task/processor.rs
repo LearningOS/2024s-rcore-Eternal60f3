@@ -7,6 +7,7 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -170,5 +171,13 @@ pub fn curr_set_priority(prio: isize) {
     let curr_task = take_current_task().unwrap();
     let mut inner = curr_task.inner_exclusive_access();
     inner.prior = prio as usize;
+    restore_current_task(curr_task.clone());
+}
+
+/// 给当前进程新增加一块内存映射 [start_va, end_va)
+pub fn curr_mmap(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) {
+    let curr_task = take_current_task().unwrap();
+    let mut inner = curr_task.inner_exclusive_access();
+    inner.memory_set.insert_framed_area(start_va, end_va, permission);
     restore_current_task(curr_task.clone());
 }
