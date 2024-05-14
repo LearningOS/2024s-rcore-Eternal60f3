@@ -7,7 +7,7 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
-use crate::mm::{MapPermission, VirtAddr};
+use crate::mm::{MapPermission, VirtAddr, VirtPageNum};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -180,4 +180,13 @@ pub fn curr_mmap(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission
     let mut inner = curr_task.inner_exclusive_access();
     inner.memory_set.insert_framed_area(start_va, end_va, permission);
     restore_current_task(curr_task.clone());
+}
+
+/// 取消映射当前进程的指定虚拟空间
+pub fn curr_munmap(start: VirtPageNum, end: VirtPageNum) -> isize {
+    let curr_task = take_current_task().unwrap();
+    let mut inner = curr_task.inner_exclusive_access();
+    let res = inner.memory_set.unmap_vpnrange(start, end);
+    restore_current_task(curr_task.clone());
+    res
 }

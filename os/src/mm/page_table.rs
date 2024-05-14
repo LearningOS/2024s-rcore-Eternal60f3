@@ -246,8 +246,21 @@ pub fn vpnrange_exist_mapped(token: usize, start: VirtPageNum, end: VirtPageNum)
     let page_table = PageTable::from_token(token);
     let vpn_range = VPNRange::new(start, end);
     for vpn in vpn_range {
-        if let Some(_) = page_table.find_pte(vpn) {
-            return true;
+        if let Some(pte) = page_table.find_pte(vpn) {
+            return pte.is_valid();
+        }
+    }
+    return false;
+}
+
+/// 查看当前页表中对于[start, end)中的vpn是否存在没有mapped的页面
+pub fn vpnrange_exist_unmapped(token: usize, start: VirtPageNum, end: VirtPageNum) -> bool {
+    let page_table = PageTable::from_token(token);
+    let vpn_range = VPNRange::new(start, end);
+    for vpn in vpn_range {
+        match page_table.find_pte(vpn) {
+            Some(pte) => return !pte.is_valid(),
+            None => return true,
         }
     }
     return false;

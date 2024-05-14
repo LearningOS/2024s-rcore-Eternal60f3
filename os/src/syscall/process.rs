@@ -6,11 +6,14 @@ use crate::{
     loader::get_app_data_by_name, 
     mm::{
         translated_refmut, translated_str, va_var2pa_mut, 
-        vpnrange_exist_mapped,
+        vpnrange_exist_mapped, vpnrange_exist_unmapped,
         MapPermission, VirtAddr
     }, 
     task::{
-        add_task, curr_mmap, curr_set_priority, current_task, current_user_token, exit_current_and_run_next, get_current_info, suspend_current_and_run_next, TaskStatus
+        add_task, curr_mmap, curr_set_priority, current_task, 
+        current_user_token, exit_current_and_run_next, 
+        get_current_info, suspend_current_and_run_next, TaskStatus,
+        curr_munmap,
     },
     timer::get_time_us,
 };
@@ -169,12 +172,24 @@ pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
 }
 
 /// YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
+/// 这里采用最简单的设计，直接删除以start为起始的段
+pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!(
         "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    
+    let start_va = VirtAddr::from(start);
+    let end_va = VirtAddr::from(start + len);
+    if !start_va.aligned() || 
+    vpnrange_exist_unmapped(
+    current_user_token(), 
+    start_va.floor(), 
+    end_va.ceil()) {
+        -1
+    } else {
+        curr_munmap(start_va.floor(), end_va.ceil())
+    }
 }
 
 /// change data segment size
