@@ -51,13 +51,33 @@ const SYSCALL_SPAWN: usize = 400;
 /// taskinfo syscall
 const SYSCALL_TASK_INFO: usize = 410;
 
+/// syscall tong
+pub const SYSCALL_TONG: [usize; SYSCALL_CNT] = [
+    SYSCALL_READ,
+    SYSCALL_WRITE,
+    SYSCALL_EXIT,
+    SYSCALL_YIELD,
+    SYSCALL_SET_PRIORITY,
+    SYSCALL_GET_TIME,
+    SYSCALL_GETPID,
+    SYSCALL_SBRK,
+    SYSCALL_MUNMAP,
+    SYSCALL_FORK,
+    SYSCALL_EXEC,
+    SYSCALL_MMAP,
+    SYSCALL_WAITPID,
+    SYSCALL_SPAWN,
+    SYSCALL_TASK_INFO,
+];
+
 mod fs;
 mod process;
 
 use fs::*;
 use process::*;
-
 use crate::fs::Stat;
+pub use process::TaskInfo;
+use crate::config::SYSCALL_CNT;
 
 /// handle syscall exception with `syscall_id` and other arguments
 pub fn syscall(syscall_id: usize, args: [usize; 4]) -> isize {

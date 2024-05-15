@@ -5,10 +5,17 @@ use alloc::sync::Arc;
 use crate::{
     config::MAX_SYSCALL_NUM,
     fs::{open_file, OpenFlags},
-    mm::{translated_refmut, translated_str},
+    timer::get_time_us,
+    mm::{
+        translated_refmut, translated_str, va_var2pa_mut,
+        vpnrange_exist_mapped, vpnrange_exist_unmapped,
+        MapPermission, VirtAddr
+    },
     task::{
-        add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus,
+        add_task, curr_mmap, curr_set_priority, current_task, 
+        current_user_token, exit_current_and_run_next, 
+        get_current_info, suspend_current_and_run_next, TaskStatus,
+        curr_munmap,
     },
 };
 
@@ -23,11 +30,11 @@ pub struct TimeVal {
 #[allow(dead_code)]
 pub struct TaskInfo {
     /// Task status in it's life cycle
-    status: TaskStatus,
+    pub status: TaskStatus,
     /// The numbers of syscall called by task
-    syscall_times: [u32; MAX_SYSCALL_NUM],
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
     /// Total running time of task
-    time: usize,
+    pub time: usize,
 }
 
 pub fn sys_exit(exit_code: i32) -> ! {
@@ -117,41 +124,72 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
+    trace!("kernel: sys_get_time");
+    let us = get_time_us();
+    let tmp = va_var2pa_mut(current_user_token(), ts);
+    *tmp = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
-pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
+pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     trace!(
-        "kernel:pid[{}] sys_task_info NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_task_info",
         current_task().unwrap().pid.0
     );
-    -1
+    let tmp = va_var2pa_mut(current_user_token(), ti);
+    get_current_info(tmp);
+    0
 }
 
 /// YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_mmap",
         current_task().unwrap().pid.0
     );
-    -1
+    
+    let start_va = VirtAddr::from(start);
+    let end_va = VirtAddr::from(start + len);
+    if !start_va.aligned() ||
+    (port & !0x7) != 0 || (port & 0x7) == 0 
+    || vpnrange_exist_mapped(current_user_token(),
+    start_va.floor(), end_va.ceil()) {
+        -1
+    } else {
+        let port = port << 1;
+        let mut permission = MapPermission::from_bits(port as u8).unwrap();
+        permission |= MapPermission::U;
+        curr_mmap(start_va, end_va, permission);
+        0
+    }
 }
 
 /// YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
+/// 这里采用最简单的设计，直接删除以start为起始的段
+pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!(
         "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    
+    let start_va = VirtAddr::from(start);
+    let end_va = VirtAddr::from(start + len);
+    if !start_va.aligned() || 
+    vpnrange_exist_unmapped(
+    current_user_token(), 
+    start_va.floor(), 
+    end_va.ceil()) {
+        -1
+    } else {
+        curr_munmap(start_va.floor(), end_va.ceil())
+    }
 }
 
 /// change data segment size
@@ -166,19 +204,39 @@ pub fn sys_sbrk(size: i32) -> isize {
 
 /// YOUR JOB: Implement spawn.
 /// HINT: fork + exec =/= spawn
-pub fn sys_spawn(_path: *const u8) -> isize {
+pub fn sys_spawn(path: *const u8) -> isize {
     trace!(
-        "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_spawn",
         current_task().unwrap().pid.0
     );
-    -1
+    
+    let token = current_user_token();
+    let path = translated_str(token, path);
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let all_data = app_inode.read_all();
+        let task = current_task().unwrap();
+        let new_task = task.spawn(all_data.as_slice());
+        let new_pid = new_task.pid.0;
+        // add new task to scheduler
+        add_task(new_task);
+        new_pid as isize
+    } else {
+        -1
+    }
+    
 }
 
 // YOUR JOB: Set task priority.
-pub fn sys_set_priority(_prio: isize) -> isize {
+pub fn sys_set_priority(prio: isize) -> isize {
     trace!(
-        "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_set_priority",
         current_task().unwrap().pid.0
     );
-    -1
+    
+    if prio >= 2 {
+        curr_set_priority(prio);
+        prio
+    } else {
+        -1
+    }
 }

@@ -15,6 +15,8 @@ pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_SIZE_BITS: usize = 0xc;
 /// the max number of syscall
 pub const MAX_SYSCALL_NUM: usize = 500;
+/// 目前操作系统所支持的系统调用次数
+pub const SYSCALL_CNT: usize = 15;
 /// the virtual addr of trapoline
 pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
 /// the virtual addr of trap context
@@ -25,3 +27,7 @@ pub const CLOCK_FREQ: usize = 12500000;
 pub const MEMORY_END: usize = 0x88000000;
 /// The base address of control registers in Virtio_Block device
 pub const MMIO: &[(usize, usize)] = &[(0x10001000, 0x1000)];
+/// stride调度算法要用的大常数
+pub const BIG_STRIDE: usize = 10000;
+/// 每个进程的初始优先级
+pub const INITIAL_PRIOR: usize = 2;

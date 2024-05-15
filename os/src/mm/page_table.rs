@@ -1,5 +1,8 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
+use super::address::VPNRange;
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use crate::config::PAGE_SIZE;
+use core::mem;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -8,13 +11,21 @@ use bitflags::*;
 bitflags! {
     /// page table entry flags
     pub struct PTEFlags: u8 {
+        /// V
         const V = 1 << 0;
+        /// R
         const R = 1 << 1;
+        /// W
         const W = 1 << 2;
+        /// X
         const X = 1 << 3;
+        /// U
         const U = 1 << 4;
+        /// G
         const G = 1 << 5;
+        /// A
         const A = 1 << 6;
+        /// D
         const D = 1 << 7;
     }
 }
@@ -156,6 +167,20 @@ impl PageTable {
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
     }
+
+    /// 将用户虚拟地址的mut指针转为物理地址的mut引用
+    pub fn va_var2pa_mut<T>(&self, ptr: *mut T) -> Option<&'static mut T> {
+        let va = VirtAddr::from(ptr as usize);
+        let vpn = va.floor();
+        if let Some(pte) = self.translate(vpn) {
+            let ppn = pte.ppn();
+            let pa = PhysAddr::from(PhysAddr::from(ppn).0 + va.page_offset());
+            if PAGE_SIZE - pa.page_offset() >= mem::size_of::<T>() {
+                return Some(pa.get_mut());
+            } 
+        }
+        return None;
+    }
 }
 
 /// Translate&Copy a ptr[u8] array with LENGTH len to a mutable u8 Vec through page table
@@ -275,4 +300,38 @@ impl Iterator for UserBufferIterator {
             Some(r)
         }
     }
+}
+/// 将用户虚拟地址的mut指针转为物理地址的mut引用
+pub fn va_var2pa_mut<T>(token: usize, ptr: *mut T) -> &'static mut T {
+    let page_table = PageTable::from_token(token);
+    if let Some(quote) = page_table.va_var2pa_mut(ptr) {
+        quote
+    } else {
+        panic!("the ptr not map or it is splited by two pages");
+    }
+}
+
+/// 查看当前页表中对于[start, end)中的vpn是否存在已经mapped的页面
+pub fn vpnrange_exist_mapped(token: usize, start: VirtPageNum, end: VirtPageNum) -> bool {
+    let page_table = PageTable::from_token(token);
+    let vpn_range = VPNRange::new(start, end);
+    for vpn in vpn_range {
+        if let Some(pte) = page_table.find_pte(vpn) {
+            return pte.is_valid();
+        }
+    }
+    return false;
+}
+
+/// 查看当前页表中对于[start, end)中的vpn是否存在没有mapped的页面
+pub fn vpnrange_exist_unmapped(token: usize, start: VirtPageNum, end: VirtPageNum) -> bool {
+    let page_table = PageTable::from_token(token);
+    let vpn_range = VPNRange::new(start, end);
+    for vpn in vpn_range {
+        match page_table.find_pte(vpn) {
+            Some(pte) => return !pte.is_valid(),
+            None => return true,
+        }
+    }
+    return false;
 }

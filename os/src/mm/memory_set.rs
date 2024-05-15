@@ -318,11 +318,29 @@ impl MemorySet {
             false
         }
     }
+
+    /// 取消指定区间的map映射，因为样例比较简单，所以当前采取的设计是直接以开头页面
+    /// 为key来删除整个area
+    #[allow(unused)]
+    pub fn unmap_vpnrange(&mut self, start: VirtPageNum, end: VirtPageNum) -> isize {
+        if let Some(idx) = self.areas
+            .iter()
+            .position(|area| {
+                let (l, r) = (area.vpn_range.get_start(), area.vpn_range.get_end());
+                l == start && r == end
+            }) 
+        {
+            self.remove_area_with_start_vpn(start);
+            0
+        } else {
+            -1
+        }
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
     vpn_range: VPNRange,
-    data_frames: BTreeMap<VirtPageNum, FrameTracker>,
+    data_frames: BTreeMap<VirtPageNum, Option<FrameTracker>>,
     map_type: MapType,
     map_perm: MapPermission,
 }
@@ -360,7 +378,7 @@ impl MapArea {
             MapType::Framed => {
                 let frame = frame_alloc().unwrap();
                 ppn = frame.ppn;
-                self.data_frames.insert(vpn, frame);
+                self.data_frames.insert(vpn, Some(frame));
             }
         }
         let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
