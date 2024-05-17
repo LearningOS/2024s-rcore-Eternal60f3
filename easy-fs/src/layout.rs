@@ -6,7 +6,7 @@ use core::fmt::{Debug, Formatter, Result};
 /// Magic number for sanity check
 const EFS_MAGIC: u32 = 0x3b800001;
 /// The max number of direct inodes
-const INODE_DIRECT_COUNT: usize = 28;
+const INODE_DIRECT_COUNT: usize = 26;
 /// The max length of inode name
 const NAME_LENGTH_LIMIT: usize = 27;
 /// The max number of indirect1 inodes
@@ -81,7 +81,9 @@ type DataBlock = [u8; BLOCK_SZ];
 /// A disk inode
 #[repr(C)]
 pub struct DiskInode {
+    pub id: u32,
     pub size: u32,
+    pub link_cnt: u32,
     pub direct: [u32; INODE_DIRECT_COUNT],
     pub indirect1: u32,
     pub indirect2: u32,
@@ -91,8 +93,10 @@ pub struct DiskInode {
 impl DiskInode {
     /// Initialize a disk inode, as well as all direct inodes under it
     /// indirect1 and indirect2 block are allocated only when they are needed
-    pub fn initialize(&mut self, type_: DiskInodeType) {
+    pub fn initialize(&mut self, id: u32, type_: DiskInodeType) {
+        self.id = id;
         self.size = 0;
+        self.link_cnt = 0;
         self.direct.iter_mut().for_each(|v| *v = 0);
         self.indirect1 = 0;
         self.indirect2 = 0;
@@ -392,7 +396,7 @@ impl DiskInode {
 #[repr(C)]
 pub struct DirEntry {
     name: [u8; NAME_LENGTH_LIMIT + 1],
-    inode_id: u32,
+    inode_id: i32,
 }
 /// Size of a directory entry
 pub const DIRENT_SZ: usize = 32;
@@ -406,12 +410,12 @@ impl DirEntry {
         }
     }
     /// Crate a directory entry from name and inode number
-    pub fn new(name: &str, inode_id: u32) -> Self {
+    pub fn new(name: &str, inode_id: i32) -> Self {
         let mut bytes = [0u8; NAME_LENGTH_LIMIT + 1];
         bytes[..name.len()].copy_from_slice(name.as_bytes());
         Self {
             name: bytes,
-            inode_id,
+            inode_id: inode_id as i32,
         }
     }
     /// Serialize into bytes
@@ -428,7 +432,11 @@ impl DirEntry {
         core::str::from_utf8(&self.name[..len]).unwrap()
     }
     /// Get inode number of the entry
-    pub fn inode_id(&self) -> u32 {
+    pub fn inode_id(&self) -> i32 {
         self.inode_id
+    }
+    /// is valid?
+    pub fn is_valid(&self) -> bool {
+        self.inode_id != -1
     }
 }

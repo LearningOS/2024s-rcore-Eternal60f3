@@ -76,7 +76,7 @@ impl EasyFileSystem {
         get_block_cache(root_inode_block_id as usize, Arc::clone(&block_device))
             .lock()
             .modify(root_inode_offset, |disk_inode: &mut DiskInode| {
-                disk_inode.initialize(DiskInodeType::Directory);
+                disk_inode.initialize(0,DiskInodeType::Directory);
             });
         block_cache_sync_all();
         Arc::new(Mutex::new(efs))
@@ -129,7 +129,12 @@ impl EasyFileSystem {
     pub fn alloc_inode(&mut self) -> u32 {
         self.inode_bitmap.alloc(&self.block_device).unwrap() as u32
     }
-
+    /// get inode-id by inode-pos
+    pub fn get_disk_inode_id(&self, block_id: u32, block_offset: u32) -> u32 {
+        let inode_size = core::mem::size_of::<DiskInode>();
+        let inodes_per_block = (BLOCK_SZ / inode_size) as u32;
+        (block_id - self.inode_area_start_block) * inodes_per_block + block_offset / inode_size as u32
+    }
     /// Allocate a data block
     pub fn alloc_data(&mut self) -> u32 {
         self.data_bitmap.alloc(&self.block_device).unwrap() as u32 + self.data_area_start_block
