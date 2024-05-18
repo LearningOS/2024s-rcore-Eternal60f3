@@ -64,9 +64,16 @@ impl Inode {
                 for data_block in data_blocks_dealloc.into_iter() {
                     fs.dealloc_data(data_block);
                 }
-                // fs.inode_bitmap.dealloc(&fs.block_device, self.id() as usize);
             }
         });
+        
+        // 不能和上面嵌套，否则会造成block_cache的死锁
+        // 这里没有立即写回，因为按照目前的理解，没必要，
+        //  但是其他凡是对block_cache进行了修改的都运行了block_cache_sync_all函数
+        //  来进行立即写回
+        if self.link_cnt() == 0 {
+            fs.dealloc_disk_inode(self.id());
+        }
     }
     #[allow(unused)]
     fn link_cnt(&self) -> usize {

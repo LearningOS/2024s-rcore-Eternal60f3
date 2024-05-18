@@ -153,4 +153,16 @@ impl EasyFileSystem {
             (block_id - self.data_area_start_block) as usize,
         )
     }
+    /// dealloc a inode
+    pub fn dealloc_disk_inode(&mut self, inode_id: u32) {
+        get_block_cache(inode_id as usize, Arc::clone(&self.block_device))
+            .lock()
+            .modify(0, |disk_inode: &mut DataBlock| {
+                disk_inode.iter_mut().for_each(|p| *p = 0);
+            });
+        self.inode_bitmap.dealloc(
+            &self.block_device,
+            (inode_id - self.inode_area_start_block) as usize,
+        );
+    }
 }
