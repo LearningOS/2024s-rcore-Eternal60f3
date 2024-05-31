@@ -42,7 +42,7 @@ impl Semaphore {
     }
 
     /// down operation of semaphore
-    pub fn down(&self) {
+    pub fn down(&self) ->isize{
         trace!("kernel: Semaphore::down");
         let mut inner = self.inner.exclusive_access();
         inner.count -= 1;
@@ -51,5 +51,11 @@ impl Semaphore {
             drop(inner);
             block_current_and_run_next();
         }
+        0
+    }
+
+    /// get_cnt
+    pub fn get_cnt(&self) -> isize {
+        self.inner.exclusive_access().count
     }
 }
