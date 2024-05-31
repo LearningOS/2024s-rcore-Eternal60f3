@@ -49,6 +49,14 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /*
+    /// available semaphore
+    pub available_sem: Vec<Option<u32>>,
+    /// available mutex
+    pub available_mutex: Vec<Option<u32>>,
+    /// need matrix
+    pub need_matrix: Vec<>
+    */
 }
 
 impl ProcessControlBlockInner {
